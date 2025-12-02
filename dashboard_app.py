@@ -2,13 +2,13 @@ import pandas as pd
 import plotly.express as px
 from dash import Dash, dcc, html, Input, Output
 
-# Load all processed files
+
 reviews_df = pd.read_csv("/Users/shashankmidididdi/Downloads/Applied_Project/reviews_with_sentiment.csv")
 business_df = pd.read_csv("/Users/shashankmidididdi/Downloads/business.csv")
 daily_df = pd.read_csv("/Users/shashankmidididdi/Downloads/Applied_Project/agg_sentiment_daily.csv")
 topwords_df = pd.read_csv("/Users/shashankmidididdi/Downloads/Applied_Project/agg_top_words_by_category.csv")
 
-# Merge business info for dropdown
+
 business_options = [
     {"label": name, "value": bid}
     for bid, name in zip(business_df["business_id"], business_df["name"])
@@ -43,16 +43,16 @@ app.layout = html.Div([
     [Input("business_dropdown", "value")]
 )
 def update_dashboard(selected_business_id):
-    # --- Daily trend
+
     df_trend = daily_df[daily_df["business_id"] == selected_business_id]
     if df_trend.empty:
         fig_empty = px.scatter(title="⚠️ No data available for this restaurant")
         return fig_empty, fig_empty, fig_empty
 
-    # --- Reviews for sentiment distribution
+
     df_reviews = reviews_df[reviews_df["business_id"] == selected_business_id]
 
-    # --- Identify category for top words
+
     business_row = business_df[business_df["business_id"] == selected_business_id]
     category_name = ""
     if not business_row.empty:
@@ -60,7 +60,7 @@ def update_dashboard(selected_business_id):
         category_name = cats.split(",")[0].strip() if cats else "Unknown"
     df_words = topwords_df[topwords_df["category"] == category_name]
 
-    # Chart 1 — Sentiment + Stars trend
+
     fig_trend = px.line(df_trend, x="date", y="avg_sentiment",
                         title=f"Average Sentiment Over Time — {business_row['name'].iloc[0]}",
                         markers=True)
@@ -69,7 +69,7 @@ def update_dashboard(selected_business_id):
                           line=dict(color="orange"))
     fig_trend.update_layout(xaxis_title="Date", yaxis_title="Score")
 
-    # Chart 2 — Sentiment Distribution
+
     if "sentiment_label" in df_reviews.columns:
         sentiment_counts = df_reviews["sentiment_label"].value_counts().reset_index()
         sentiment_counts.columns = ["sentiment", "count"]
@@ -80,7 +80,7 @@ def update_dashboard(selected_business_id):
     else:
         fig_pie = px.scatter(title="⚠️ Sentiment label not found in reviews data")
 
-    # Chart 3 — Top Words
+
     if not df_words.empty:
         fig_bar = px.bar(df_words.sort_values(by="count", ascending=False),
                          x="keyword", y="count",
@@ -92,6 +92,6 @@ def update_dashboard(selected_business_id):
     return fig_trend, fig_pie, fig_bar
 
 
-# ---------- Run the app locally ----------
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=8050, debug=True)

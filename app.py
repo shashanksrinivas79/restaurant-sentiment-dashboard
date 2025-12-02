@@ -24,7 +24,7 @@ def verify_user(username: str, password: str):
     if row.empty:
         return None
     pw_hash = str(row.iloc[0]["password_hash"])
-    try:
+    try: 
         ok = bcrypt.check_password_hash(pw_hash, password)
     except Exception:
         ok = (pw_hash == password)  # fallback if you temporarily use plaintext (not recommended)
@@ -190,30 +190,41 @@ def set_business_scope(ctx):
      Input("user-context", "children")]
 )
 def update_charts(selected_bid, ctx):
+    # If not logged in / no context, return placeholders
     if not ctx:
-        # not logged in
         empty = px.scatter(title="Please log in.")
-        return empty, empty, empty, [kpi_card("Avg Sentiment (30d)", "—"), kpi_card("Avg Stars (30d)", "—"), kpi_card("Reviews (30d)", "—")]
+        kpis = [
+            dbc.Col(kpi_card("Avg Sentiment (30d)", "—"), md=4),
+            dbc.Col(kpi_card("Avg Stars (30d)", "—"), md=4),
+            dbc.Col(kpi_card("Reviews (30d)", "—"), md=4),
+        ]
+        return empty, empty, empty, kpis
 
     role, user_bid, _ = ctx.split("|")
     bid = selected_bid if role == "admin" else user_bid
     if not bid:
         empty = px.scatter(title="No business selected.")
-        return empty, empty, empty, [kpi_card("Avg Sentiment (30d)", "—"), kpi_card("Avg Stars (30d)", "—"), kpi_card("Reviews (30d)", "—")]
+        kpis = [
+            dbc.Col(kpi_card("Avg Sentiment (30d)", "—"), md=4),
+            dbc.Col(kpi_card("Avg Stars (30d)", "—"), md=4),
+            dbc.Col(kpi_card("Reviews (30d)", "—"), md=4),
+        ]
+        return empty, empty, empty, kpis
 
-    # Data slices
-    trend = daily_df[daily_df["business_id"] == bid].copy()
-    trend["date"] = pd.to_datetime(trend["date"], errors="coerce")
+    # Data slices (trend from daily_df, reviews from reviews_df)
+    trend = daily_df[daily_df["business_id"] == bid].copy() if "business_id" in daily_df.columns else daily_df.copy()
+    if "date" in trend.columns:
+        trend["date"] = pd.to_datetime(trend["date"], errors="coerce")
 
-    revs = reviews_df[reviews_df["business_id"] == bid].copy()
-    name = business_df.loc[business_df["business_id"] == bid, "name"].iloc[0] if (business_df["business_id"] == bid).any() else bid
+    revs = reviews_df[reviews_df["business_id"] == bid].copy() if "business_id" in reviews_df.columns else reviews_df.copy()
+    name = business_df.loc[business_df["business_id"] == bid, "name"].iloc[0] if ('business_id' in business_df.columns and (business_df["business_id"] == bid).any()) else str(bid)
 
     # KPIs (last 30 days)
-    if not trend.empty:
+    if not trend.empty and "date" in trend.columns:
         last30 = trend[trend["date"] >= (trend["date"].max() - pd.Timedelta(days=30))]
-        k1 = f"{last30['avg_sentiment'].mean():.2f}" if not last30.empty else "—"
-        k2 = f"{last30['avg_stars'].mean():.2f}" if not last30.empty else "—"
-        k3 = f"{int(last30['review_count'].sum())}" if not last30.empty else "0"
+        k1 = f"{last30['avg_sentiment'].mean():.2f}" if not last30.empty and "avg_sentiment" in last30.columns else "—"
+        k2 = f"{last30['avg_stars'].mean():.2f}" if not last30.empty and "avg_stars" in last30.columns else "—"
+        k3 = f"{int(last30['review_count'].sum())}" if not last30.empty and "review_count" in last30.columns else "0"
     else:
         k1 = k2 = "—"; k3 = "0"
 
@@ -223,17 +234,37 @@ def update_charts(selected_bid, ctx):
         dbc.Col(kpi_card("Reviews (30d)", k3, "secondary"), md=4),
     ]
 
-    # Trend chart
-    if not trend.empty:
-        fig_trend = px.line(trend, x="date", y="avg_sentiment",
-                            title=f"Average Sentiment Over Time — {name}", markers=True)
-        fig_trend.add_scatter(x=trend["date"], y=trend["avg_stars"], mode="lines+markers",
-                              name="Average Stars")
-        fig_trend.update_layout(xaxis_title="Date", yaxis_title="Score")
+    # ---------------- Trend chart (smoothed) ----------------
+    if not trend.empty and "date" in trend.columns:
+        # Ensure sorted by date
+        df_ts = trend.sort_values("date")
+
+        # Base line for sentiment compound
+        fig_trend = px.line(
+            df_ts,
+            x="date",
+            y="avg_sentiment" if "avg_sentiment" in df_ts.columns else "sentiment_compound",
+            title=f"Average Sentiment Over Time — {name}"
+        )
+
+        # Apply spline to all existing traces (this will smooth the first trace)
+        fig_trend.update_traces(line_shape="spline")
+
+        # If avg_stars exists, add it as a smoothed trace
+        if "avg_stars" in df_ts.columns:
+            fig_trend.add_scatter(
+                x=df_ts["date"],
+                y=df_ts["avg_stars"],
+                mode="lines",
+                name="Average Stars",
+                line=dict(shape="spline")
+            )
+
+        fig_trend.update_layout(xaxis_title="Date", yaxis_title="Score", hovermode="x unified")
     else:
         fig_trend = px.scatter(title="No trend data found.")
 
-    # Pie chart
+    # ---------------- Pie chart ----------------
     if "sentiment_label" in revs.columns and not revs.empty:
         counts = revs["sentiment_label"].value_counts().reset_index()
         counts.columns = ["sentiment", "count"]
@@ -244,11 +275,10 @@ def update_charts(selected_bid, ctx):
     else:
         fig_pie = px.scatter(title="No sentiment labels found.")
 
-    # Top words by category
-    # Pick this business's primary category:
-    cat = business_df.loc[business_df["business_id"] == bid, "categories"]
+    # ---------------- Top words ----------------
+    cat = business_df.loc[business_df["business_id"] == bid, "categories"] if ('business_id' in business_df.columns and (business_df["business_id"] == bid).any()) else pd.Series([], dtype=object)
     cat = str(cat.iloc[0]).split(",")[0].strip() if not cat.empty else ""
-    words = topwords_df[topwords_df["category"] == cat]
+    words = topwords_df[topwords_df["category"] == cat] if "category" in topwords_df.columns else pd.DataFrame()
     if not words.empty:
         fig_words = px.bar(words.sort_values("count", ascending=False),
                            x="keyword", y="count",
@@ -256,7 +286,9 @@ def update_charts(selected_bid, ctx):
     else:
         fig_words = px.scatter(title=f"No keywords found for category '{cat}'")
 
+    # Return all outputs (must be inside the function)
     return fig_trend, fig_pie, fig_words, kpi_children
+
 
 # ---------- Run locally ----------
 if __name__ == "__main__":
