@@ -34,7 +34,7 @@ except Exception:
 
 # ---------- Config ----------
 DATA_DIR = os.environ.get("DATA_DIR", os.getcwd())
-business_df = pd.read_csv("/Users/shashankmidididdi/Downloads/business.csv")
+business_df = pd.read_csv("business.csv")
 reviews_df = pd.read_csv("reviews_with_sentiment.csv")
 daily_df = pd.read_csv("agg_sentiment_daily.csv")
 topwords_df = pd.read_csv("agg_top_words_by_category.csv")
