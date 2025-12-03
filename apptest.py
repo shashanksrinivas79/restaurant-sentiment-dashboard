@@ -454,6 +454,10 @@ if __name__ == "__main__":
         return response
 
     # Auto-open the login page in browser
-    import webbrowser
-    webbrowser.open("http://127.0.0.1:8050/")
-    app.run(host="127.0.0.1", port=8050, debug=True)
+if __name__ == "__main__":
+    import os
+
+    # Required for deployment — bind to host 0.0.0.0 and dynamic PORT
+    port = int(os.environ.get("PORT", 8050))
+    app.run(host="0.0.0.0", port=port)
+

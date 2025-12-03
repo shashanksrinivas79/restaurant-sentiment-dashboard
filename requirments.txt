@@ -1,0 +1,10 @@
+flask
+gunicorn
+dash
+dash-bootstrap-components
+pandas
+numpy
+bcrypt
+plotly
+sklearn
+nltk
