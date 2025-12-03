@@ -4,7 +4,8 @@ dash
 dash-bootstrap-components
 pandas
 numpy
-bcrypt
 plotly
-sklearn
+scikit-learn
 nltk
+flask-bcrypt
+bcrypt
